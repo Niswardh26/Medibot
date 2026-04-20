@@ -2,6 +2,7 @@ import os
 import streamlit as st
 from dotenv import load_dotenv
 
+os.environ["CUDA_VISIBLE_DEVICES"] = ""
 from langchain_groq import ChatGroq
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_community.vectorstores import FAISS
@@ -21,8 +22,9 @@ DB_FAISS_PATH = "vectorstore/db_faiss"
 @st.cache_resource
 def get_vectorstore():
     embedding_model = HuggingFaceEmbeddings(
-        model_name="sentence-transformers/all-MiniLM-L6-v2"
-    )
+    model_name="sentence-transformers/all-MiniLM-L6-v2",
+    model_kwargs={"device": "cpu"}
+)
     db = FAISS.load_local(
         DB_FAISS_PATH, embedding_model, allow_dangerous_deserialization=True
     )
