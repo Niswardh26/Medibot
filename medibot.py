@@ -4,9 +4,10 @@ from dotenv import load_dotenv
 
 from langchain_groq import ChatGroq
 from langchain_huggingface import HuggingFaceEmbeddings
-from langchain.chains import RetrievalQA
 from langchain_community.vectorstores import FAISS
 from langchain_core.prompts import PromptTemplate
+from langchain_core.runnables import RunnablePassthrough
+from langchain_core.output_parsers import StrOutputParser
 
 # Load .env
 load_dotenv()
@@ -23,9 +24,7 @@ def get_vectorstore():
         model_name="sentence-transformers/all-MiniLM-L6-v2"
     )
     db = FAISS.load_local(
-        DB_FAISS_PATH,
-        embedding_model,
-        allow_dangerous_deserialization=True
+        DB_FAISS_PATH, embedding_model, allow_dangerous_deserialization=True
     )
     return db
 
@@ -44,10 +43,7 @@ Question: {question}
 
 Start the answer directly.
 """
-    return PromptTemplate(
-        template=template,
-        input_variables=["context", "question"]
-    )
+    return PromptTemplate(template=template, input_variables=["context", "question"])
 
 
 # =========================
@@ -55,9 +51,9 @@ Start the answer directly.
 # =========================
 def load_llm():
     return ChatGroq(
-        model_name="llama-3.1-8b-instant",   # fast + free
+        model_name="llama-3.1-8b-instant",  # fast + free
         temperature=0.7,
-        groq_api_key=os.environ["GROQ_API_KEY"]
+        groq_api_key=os.environ["GROQ_API_KEY"],
     )
 
 
@@ -78,28 +74,29 @@ def main():
 
     if prompt:
         st.chat_message("user").markdown(prompt)
-        st.session_state.messages.append(
-            {"role": "user", "content": prompt}
-        )
+        st.session_state.messages.append({"role": "user", "content": prompt})
 
         try:
             vectorstore = get_vectorstore()
+            llm = load_llm()
+            retriever = vectorstore.as_retriever(search_kwargs={"k": 3})
 
-            qa_chain = RetrievalQA.from_chain_type(
-                llm=load_llm(),
-                chain_type="stuff",
-                retriever=vectorstore.as_retriever(search_kwargs={"k": 3}),
-                return_source_documents=False,
-                chain_type_kwargs={"prompt": set_custom_prompt()}
+            # Create a simple retrieval chain
+            def format_docs(docs):
+                return "\n\n".join(doc.page_content for doc in docs)
+
+            # Chain: retrieve docs -> format -> pass to LLM with prompt
+            chain = (
+                {"context": retriever | format_docs, "question": RunnablePassthrough()}
+                | set_custom_prompt()
+                | llm
+                | StrOutputParser()
             )
 
-            response = qa_chain.invoke({"query": prompt})
-            result = response["result"]
+            result = chain.invoke(prompt)
 
             st.chat_message("assistant").markdown(result)
-            st.session_state.messages.append(
-                {"role": "assistant", "content": result}
-            )
+            st.session_state.messages.append({"role": "assistant", "content": result})
 
         except Exception as e:
             st.error(str(e))

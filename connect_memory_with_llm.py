@@ -25,7 +25,7 @@ def load_llm(huggingface_repo_id):
         max_new_tokens=256,
         task="conversational"   # ⭐ VERY IMPORTANT
     )
-
+            
     llm = ChatHuggingFace(llm=endpoint)
 
     return llm
